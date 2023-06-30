@@ -1,0 +1,80 @@
+- name: Primeiro rollot - canary
+  hosts: control_plane
+  tasks:
+
+  - name: Criando 1
+    kubernetes.core.k8s:
+      state: present
+      definition:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Rollout
+        metadata:
+          name: rollouts-color
+          namespace: canary
+        spec:
+          replicas: 20
+          strategy:
+            canary:
+              steps:
+              - setWeight: 20
+              - pause: {}
+              - setWeight: 20
+              - pause: {}
+              - setWeight: 60
+              - pause: {duration: 60}
+              - setWeight: 80
+              - pause: {duration: 60}
+          revisionHistoryLimit: 2
+          selector:
+            matchLabels:
+              app: rollouts-color
+          template:
+            metadata:
+              labels:
+                app: rollouts-color
+            spec:
+              containers:
+              - name: rollouts-color
+                image: argoproj/rollouts-demo:blue
+                ports:
+                - name: http
+                  containerPort: 8080
+                  protocol: TCP
+
+  - name: Service rollouts-color
+    kubernetes.core.k8s:
+      state: present
+      definition:
+        apiVersion: v1
+        kind: Service
+        metadata:
+          namespace: canary
+          name: rollouts-color-service
+        spec:
+          ports:
+            - port: 80
+              targetPort: 8080
+          selector:
+            app: rollouts-color
+
+  - name: Criando rotas rollouts-color
+    kubernetes.core.k8s:
+      state: present
+      definition:
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          namespace: canary
+          name: canary-ingress
+        spec:
+          rules:
+          - host: canary.traefik.189.7.79.10.nip.io
+            http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                       name: rollouts-color-service
+                       port:
+                        number: 80                                              
